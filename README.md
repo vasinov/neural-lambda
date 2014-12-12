@@ -226,14 +226,14 @@ Once `handler` is triggered, we read an S3 object and then make an MQTT publish 
 Now let's setup some rules in ThingFabric. After you registered, go to your first project and then select "Rules" on the left. In the wizard select "Send SMS" and type your phone number starting with a `1`, a message, and then click "Save". Then go to the Advanced tab and change your rule to:
 
 ```
-""<YOUR DOMAIN>/lambda/#" {"alarm": val where val > 0.7} -> sms to:"17209999999" text:"Temperature is too high!""
+""<YOUR DOMAIN>/lambda/#" {"alarm": val where val > 0.7} -> sms to:"17209999999" text:"Temperature or pressure is too high!""
 ```
 
 Here is what it should look like:
 
 ![](screenshots/rule.png)
 
-Congratulations! You created your first rule. It will trigger a text message if the temperature is too high. You can get pretty sophisticated with our rules engine and use payload values in custom logic. [Check out](https://2lemetry.atlassian.net/wiki/display/KB/How+to+use+the+Rules+Engine) the docs and create more rules to complete this project!
+Congratulations! You created your first rule. It will send a text message if the temperature or pressure is too high. You can get pretty sophisticated with our rules engine and use payload values in custom logic. [Check out](https://2lemetry.atlassian.net/wiki/display/KB/How+to+use+the+Rules+Engine) the docs and create more rules to complete this project!
 
 ## Outro
 
