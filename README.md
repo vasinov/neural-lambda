@@ -226,7 +226,7 @@ Once `handler` is triggered, we read an S3 object and then make an MQTT publish 
 Now let's setup some rules in ThingFabric. After you registered, go to your first project and then select "Rules" on the left. In the wizard select "Send SMS" and type your phone number starting with a `1`, a message, and then click "Save". Then go to the Advanced tab and change your rule to:
 
 ```
-"<YOUR DOMAIN>/lambda/#" {"values": {"t": val where val > 0.7}} -> sms to:"17209999999" text:"Temperature is too high!"
+""<YOUR DOMAIN>/lambda/#" {"alarm": val where val > 0.7} -> sms to:"17209999999" text:"Temperature is too high!""
 ```
 
 Here is what it should look like:
