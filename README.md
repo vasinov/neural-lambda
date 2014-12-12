@@ -32,10 +32,10 @@ var mqtt = require('mqtt');
 
 var config = {
   mqtt: {
-    clientId: "yourClientId",
-    username: "thingFabricUsername",
-    md5Pass: "thingFabricMd5Password",
-    outputTopic: "yourThingFabricDomain/lambda"
+    clientId: "<CLIENT ID>",
+    username: "<THING FABRIC USERNAME>",
+    md5Pass: "<THING FABRIC MD5 PASSWORD>",
+    outputTopic: "<THING FABRIC DOMAIN>/lambda"
   },
   alarm: {
     maxTemp: 200,
@@ -219,15 +219,19 @@ exports.handler = function(event, context) {
 };
 ```
 
-Once `handler` is triggered, we read an S3 object and then make an MQTT publish call to the device topic if either temperature or pressure exceeded critical values of `200` and `800` or if the alarm is triggered by some combination of the two inside the neural network.
+Once `handler` is triggered, we read an S3 object and then make an MQTT publish call to the device topic if either temperature or pressure exceeded critical values of `200` and `800` or if the alarm is triggered by some combination of the two inside the neural network. Here are the messages that you'll see if you are subscribed to `<YOUR DOMAIN>/#` via MQTT.
 
 ![](screenshots/messages.png)
 
 Now let's setup some rules in ThingFabric. After you registered, go to your first project and then select "Rules" on the left. In the wizard select "Send SMS" and type your phone number starting with a `1`, a message, and then click "Save". Then go to the Advanced tab and change your rule to:
 
 ```
-"<YOUR DOMAIN>/lambda/#" {"values.t":val where val > 0.7} -> sms to:"17209999999" text:"Temperature is too high!"
+"<YOUR DOMAIN>/lambda/#" {"values": {"t": val where val > 0.7}} -> sms to:"17209999999" text:"Temperature is too high!"
 ```
+
+Here is what it should look like:
+
+![](screenshots/rule.png)
 
 Congratulations! You created your first rule. It will trigger a text message if the temperature is too high. You can get pretty sophisticated with our rules engine and use payload values in custom logic. [Check out](https://2lemetry.atlassian.net/wiki/display/KB/How+to+use+the+Rules+Engine) the docs and create more rules to complete this project!
 
