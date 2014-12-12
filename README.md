@@ -179,12 +179,10 @@ exports.handler = function(event, context) {
     mqtt = new MqttClient(
       config.mqtt,
       function () {
-        return context.done(null, "DONE");
+        return context.done(null);
       },
       function (error) {
-        console.log(error);
-  
-        return context.done(null, "ERROR");
+        return context.done(null, error);
       }
     ),
     
