@@ -167,5 +167,3 @@ exports.handler = function(event, context) {
     mqtt.disconnect();
   });
 };
-
-exports.handler();
