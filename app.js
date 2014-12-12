@@ -1,5 +1,3 @@
-console.log('Loading event');
-
 var aws = require('aws-sdk');
 var s3 = new aws.S3({apiVersion: '2006-03-01'});
 var brain = require("brain");
@@ -8,7 +6,7 @@ var mqtt = require('mqtt');
 var mqttClientId = "";
 var mqttUserName = "";
 var mqttMd5Pass = "";
-var mqttOutputTopic = "/lambda";
+var mqttOutputTopic = "";
 var client = mqtt.connect("mqtt://" + mqttUserName + ":" + mqttMd5Pass + "@q.m2m.io:1883", { "clientId": mqttClientId });
 
 var maxTemp = 200;
