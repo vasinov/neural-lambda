@@ -1,17 +1,21 @@
 var aws = require('aws-sdk');
-var s3 = new aws.S3({apiVersion: '2006-03-01'});
 var brain = require("brain");
 var mqtt = require('mqtt');
 
-var mqttClientId = "";
-var mqttUserName = "";
-var mqttMd5Pass = "";
-var mqttOutputTopic = "";
-var client = mqtt.connect("mqtt://" + mqttUserName + ":" + mqttMd5Pass + "@q.m2m.io:1883", { "clientId": mqttClientId });
+var config = {
+  mqtt: {
+    clientId: "",
+    username: "",
+    md5Pass: "",
+    outputTopic: ""
+  },
+  alarm: {
+    maxTemp: 200,
+    maxPressure: 800,
+    alarmThreshold: 0.7
+  }
+};
 
-var maxTemp = 200;
-var maxPressure = 800;
-var alarmThreshold = 0.7;
 var trainingData = [
   {input: { t: 10, p: 275 }, output: { alarm: 0 }},
   {input: { t: 14, p: 230 }, output: { alarm: 0 }},
@@ -34,12 +38,12 @@ var trainingData = [
   {input: { t: 32, p: 275 }, output: { alarm: 0 }}
 ];
 
-function FactoryAlarm(maxTemp, maxPressure, alarmThreshold) {
+function Alarm(config) {
   var _this = this;
 
-  _this.maxTemp = maxTemp;
-  _this.maxPressure = maxPressure;
-  _this.alarmThreshold = alarmThreshold;
+  _this.maxTemp = config.maxTemp;
+  _this.maxPressure = config.maxPressure;
+  _this.alarmThreshold = config.alarmThreshold;
   _this.nn = new brain.NeuralNetwork();
 
   _this.tempToInput = function(t) {
@@ -63,51 +67,90 @@ function FactoryAlarm(maxTemp, maxPressure, alarmThreshold) {
     return _this.nn.train(_this.parseTrainingData(data));
   };
 
-  _this.trigger = function(data) {
+  _this.isTriggered = function(data) {
     var guessedAlarm = _this.nn.run({ t: _this.tempToInput(data.t), p: _this.pressureToInput(data.p) });
 
-    return (guessedAlarm.alarm > alarmThreshold);
+    return (guessedAlarm.alarm > _this.alarmThreshold);
   };
 }
 
-exports.handler = function(event, context) {
-  s3.getObject({
-    Bucket: event.Records[0].s3.bucket.name,
-    Key: event.Records[0].s3.object.key
-  }, function (err, data) {
-    var readings = JSON.parse(data.Body.toString());
+function S3Parser() {
+  var _this = this;
 
-    // TODO: remove once S3 integration is tested
-    rs = { readings: [
+  _this.parseFakeS3Object = function(cb) {
+    var rs = { readings: [
       { device_id: "foo", values: { t: 100, p: 400 } },
       { device_id: "bar", values: { t: 120, p: 320 } },
       { device_id: "foobar", values: { t: 90, p: 220 } }
     ] };
 
-    rs.readings.forEach(function(reading) {
+    return cb(rs);
+  };
+
+  _this.parseS3Object = function(cb) {
+    var s3 = new aws.S3({apiVersion: '2006-03-01'});
+
+    s3.getObject({
+      Bucket: event.Records[0].s3.bucket.name,
+      Key: event.Records[0].s3.object.key
+    }, function (err, data) {
+      return cb(JSON.parse(data.Body.toString()));
+    });
+  };
+}
+
+function MqttClient(config, onClose, onError) {
+  var _this = this;
+  _this.username = config.username;
+  _this.pass = config.md5Pass;
+  _this.clientId = config.clientId;
+
+  _this.client = mqtt.connect(
+      "mqtt://" + _this.username + ":" + _this.pass + "@q.m2m.io:1883", { "clientId": _this.clientId }
+  );
+
+  _this.client.on("close", onClose);
+
+  _this.client.on("error", function(error) { onError(error) });
+
+  _this.publish = function(topicName, dataPoint) {
+    return _this.client.publish(topicName, JSON.stringify({ alarm: true, values: dataPoint }));
+  };
+}
+
+exports.handler = function(event, context) {
+  var parser = new S3Parser();
+  var mqtt = new MqttClient(
+    config.mqtt,
+    function () {
+      return context.done(null, "DONE");
+    },
+    function (error) {
+      console.log(error);
+
+      return context.done(null, "ERROR");
+    }
+  );
+
+  parser.parseFakeS3Object(function(payload) {
+    payload.readings.forEach(function(reading) {
       var dataPoint = reading.values;
 
-      if (dataPoint.t > maxTemp || dataPoint.p > maxPressure) {
-        client.publish(mqttOutputTopic, JSON.stringify({ alarm: true, values: dataPoint }));
+      if (dataPoint.t > config.alarm.maxTemp || dataPoint.p > config.alarm.maxPressure) {
+        mqtt.publish(config.mqtt.outputTopic + "/" + reading.device_id, dataPoint);
       } else {
-        var alarm = new FactoryAlarm(maxTemp, maxPressure, alarmThreshold);
+        var alarm = new Alarm(config.alarm);
 
         alarm.train(trainingData);
 
-        if (alarm.trigger(dataPoint)) {
-          client.publish(mqttOutputTopic + "/" + reading.device_id, JSON.stringify({ alarm: true, values: dataPoint }));
+        if (alarm.isTriggered(dataPoint)) {
+          mqtt.publish(config.mqtt.outputTopic + "/" + reading.device_id, dataPoint);
         }
       }
     });
 
-    client.end();
-
-    client.on("close", (function () {
-      return context.done(null, "DONE");
-    }));
-
-    client.on("error", (function () {
-      return context.done(null, "ERROR");
-    }));
+    mqtt.client.end();
   });
 };
+
+exports.handler();
