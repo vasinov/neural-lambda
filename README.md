@@ -45,7 +45,7 @@ var config = {
 };
 
 exports.handler = function(event, context) {
-  return context.done(null, "DONE");
+  return context.done(null);
 };
 ```
 
