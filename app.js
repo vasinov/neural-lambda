@@ -123,32 +123,36 @@ function MqttClient(config, onClose, onError) {
 }
 
 exports.handler = function(event, context) {
-  var parser = new S3Parser();
-  var mqtt = new MqttClient(
-    config.mqtt,
-    function () {
-      return context.done(null, "DONE");
-    },
-    function (error) {
-      console.log(error);
+  var
+    parser = new S3Parser(),
 
-      return context.done(null, "ERROR");
-    }
-  );
+    mqtt = new MqttClient(
+      config.mqtt,
+      function () {
+        return context.done(null, "DONE");
+      },
+      function (error) {
+        console.log(error);
+
+        return context.done(null, "ERROR");
+      }
+    ),
+
+    alarm = new Alarm(config.alarm);
 
   parser.parseFakeS3Object(function(payload) {
     payload.readings.forEach(function(reading) {
-      var dataPoint = reading.values;
+      var
+        dataPoint = reading.values,
+        outputTopic = config.mqtt.outputTopic + "/" + reading.device_id;
 
       if (dataPoint.t > config.alarm.maxTemp || dataPoint.p > config.alarm.maxPressure) {
-        mqtt.publish(config.mqtt.outputTopic + "/" + reading.device_id, dataPoint);
+        mqtt.publish(outputTopic, dataPoint);
       } else {
-        var alarm = new Alarm(config.alarm);
-
         alarm.train(trainingData);
 
         if (alarm.isTriggered(dataPoint)) {
-          mqtt.publish(config.mqtt.outputTopic + "/" + reading.device_id, dataPoint);
+          mqtt.publish(outputTopic, dataPoint);
         }
       }
     });
