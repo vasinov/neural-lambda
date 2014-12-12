@@ -2,13 +2,13 @@
 
 ## Introduction
 
-You might have noticed that we at 2lemetry are pretty excited about Amazon's newest AWS product [Lambda](http://aws.amazon.com/lambda/). Several engineers [experimented](http://2lemetry.com/tag/lambda/) with how lambdas function and work together with the MQTT protocol and [ThingFabric](https://app.thingfabric.com). I decided to work on a small high level experiment that involves real computations to see how neural networks can be used inside lambdas in the context of the Internet of Things. I'm going to heavily utilize the MQTT foundation described by Kyle, our CEO, in his recent [blog post](http://2lemetry.com/2014/12/05/native-mqtt-lambda/).
+You might have noticed that we at 2lemetry are pretty excited about Amazon's newest AWS product [Lambda](http://aws.amazon.com/lambda/). Several of our engineers [experimented](http://2lemetry.com/tag/lambda/) with how lambdas work together with the MQTT protocol and [ThingFabric](https://app.thingfabric.com). I decided to work on a small experiment with real computations to see how neural networks can be used inside lambdas in the context of the Internet of Things. I'm going to heavily utilize the S3/MQTT foundation described by Kyle, our CEO, in his recent [blog post](http://2lemetry.com/2014/12/05/native-mqtt-lambda/).
 
 ## Use Case
 
-It's easy to imagine a large facility or a factory that has thousands of different sensors in various combinations. Let's imagine that a factory has hydraulic pumps along the assembly line with two major sets of sensors for temperature and pressure. Certain temperature and pressure combinations are hazardous and should trigger an alarm. However, because of various factors, the relationship between the three variables (temperature, pressure, and alarm signal) can't be described with a concrete equation. In cases like this machines learning can be used.
+It's easy to imagine a large facility or a factory that has thousands of different sensors in various combinations. Let's imagine that a factory has hydraulic pumps along the assembly line with two major sets of sensors for temperature and pressure. Certain temperature and pressure combinations are hazardous and should trigger an alarm at the low alarm threshold and shut them off completely at the high threshold. However, because of various factors, the relationship between temperature, pressure, and alarm signal can't be described with a concrete equation. In cases like this machines learning can be used.
  
-In my Lambda experiment I decided to emulate this scenario in which pairs of sensors report their values to some kind of centralized hub every few seconds and then the hub deploys a combined payload snapshot to Amazon S3, which triggers a lambda with a neural network in it, and then, finally, publishes an MQTT message to ThingFabric if the alarm value is greater than a certain threshold.
+In my Lambda experiment I decided to emulate this scenario in which pairs of sensors report their values to some kind of centralized hub every few seconds and then the hub deploys a combined payload snapshot to Amazon S3, which triggers a lambda with a neural network in it, and then, finally, publishes an MQTT message to ThingFabric if the alarm value is greater than a certain threshold. On the ThingFabric end we'll setup some rules that will send a text message and shut off the device completely by sending another MQTT message.
  
 ## Setting Up Lambda
  
@@ -16,11 +16,11 @@ To better understand how we should setup our lambda let's describe all events th
  
 - A payload with temperature and pressure values is deployed to a specific S3 bucket.
 - Our lambda is triggered.
-- A neural network gets initialized with an appropriate training set.
+- A neural network is initialized with an appropriate training set.
 - Neural network sequentially evaluates payload values and triggers an MQTT publish call to a specific topic in ThingFabric.
-- ThingFabric receives a message and does something meaningful with it (e.g., shuts off a valve, sends a text message or email, etc.)
+- ThingFabric receives a message and does something meaningful with it (e.g., shuts off a valve, sends a text message or email, etc.).
  
-Now that we have a better understanding of what's going on in the system let's setup our lambda appropriately. First, create a lambda on the new lambda page and assign a role to it that has access to the S3 bucket that you are going to use for your payload deployments.
+Now that we have a better understanding of what's going at the high level let's setup our lambda. First, create a lambda on the new lambda AWS page and assign a role to it that has access to the S3 bucket that you are going to use for your payload deployments.
  
 Now, let's write some boilerplate code for our lambda!
 
@@ -49,13 +49,13 @@ exports.handler = function(event, context) {
 };
 ```
 
-Here we just setup some initial config variables for our lambda and the main event handler. We are going to rely on these variables in the MQTT connection and the neural network. The cool thing about Amazon Lambda is that you can use almost any Node.js library in your projects. You'll have to install all of your libraries locally in the same directory as your project, since Amazon doesn't have any facilities that would allow it to process `package.json`. In our example we are only using three Node libraries: `aws-sdk`, `brain`, and `mqtt`. Once you install them in the `./node_modules` folder, you are good to go.
+Here we just setup some initial config variables for the lambda and the main event handler. We are going to rely on these variables in the MQTT connection and the neural network. The cool thing about Amazon Lambda is that you can use almost any Node.js library in your projects. You'll have to install all of your libraries locally in the same directory as your project, since Amazon doesn't have any facilities that would allow it to process `package.json`. In our example, we are only using three Node libraries: `aws-sdk`, `brain`, and `mqtt`. Once you install them in the `./node_modules` folder, you are good to go.
  
 ## Parsing S3 Payloads and Sending MQTT messages
 
 As I mentioned earlier, Kyle's already [described](http://2lemetry.com/2014/12/05/native-mqtt-lambda/) how to parse S3 payloads and easily send MQTT messages to ThingFabric in great detail, so I'm only going to briefly cover it here. First, let's describe the data format for our payloads. I decided to keep it minimal and only include a device ID that corresponds to a specific MQTT topic and a temperature/pressure sensor value pair. It looks something like this:
 
-``` json
+``` javascript
 { device_id: "foo", values: { t: 100, p: 400 } },
 { device_id: "bar", values: { t: 120, p: 320 } },
 { device_id: "foobar", values: { t: 90, p: 220 } }
@@ -100,26 +100,30 @@ function MqttClient(config, onClose, onError) {
   _this.publish = function(topicName, dataPoint) {
     return _this.client.publish(topicName, JSON.stringify({ alarm: true, values: dataPoint }));
   };
+  
+  _this.disconnect = function() {
+    return _this.client.end();  
+  };
 }
 ```
 
-Now we have all of the boilerplate code setup, so let's add some neural entwork logic! 
+Now we have all of the boilerplate code setup, so let's add some neural network logic! 
 
 ## Adding a Neural Network
 
-I'm going to use the neural network implementation by [Brain.js](https://github.com/harthur/brain) in our lambda. All it needs is a training dataset that in our case will look like this:
+I'm going to use a neural network implementation by [Brain.js](https://github.com/harthur/brain) in our lambda. All it needs is a training dataset that in our case will look like this:
 
 ``` javascript
 var trainingData = [
-  {input: { t: 10, p: 275 }, output: { alarm: 0 }},
-  {input: { t: 14, p: 230 }, output: { alarm: 0 }},
-  {input: { t: 65, p: 240 }, output: { alarm: 0 }},
-  {input: { t: 89, p: 301 }, output: { alarm: 1 }},
+  { input: { t: 10, p: 275 }, output: { alarm: 0 } },
+  { input: { t: 14, p: 230 }, output: { alarm: 0 } },
+  { input: { t: 65, p: 240 }, output: { alarm: 0 } },
+  { input: { t: 89, p: 301 }, output: { alarm: 1 } },
   ...
 ];
 ```
 
-These are alarm values that were added by a human supervisor who knows for sure when the alarm should be triggered. In our case we don't need very many values to get to a small training error. I've only used 19 values to get to good stable neural network output.
+These are alarm values that were added by a human supervisor who knows for sure when the alarm should be triggered. In our case we don't need very many values to get to a small training error. I only used 19 values to get good and stable neural network outputs.
 
 Once we have our training data, let's setup the alarm object that does all the interesting work in our lambda:
 
@@ -161,9 +165,11 @@ function Alarm(config) {
 }
 ```
 
+Everything should be pretty self explanatory here. Two main functions are `train` and `isTriggered`. The former one trains the neural network with a training dataset by adjusting neuron weights. The latter checks if a temperature/pressure combination triggers an alarm.  
+
 ## Putting It All Together
 
-Now it's time to put all pieces together and write the handler function that Amazon Lambda is going to process:
+Now it's time to put all pieces together and write a handler function that Amazon Lambda is going to process:
 
 ``` javascript
 exports.handler = function(event, context) {
@@ -202,6 +208,8 @@ exports.handler = function(event, context) {
 };
 ```
 
-Once `handler` is triggered, we read the S3 object and then make an MQTT publish call to the device topic if either temperature or pressure exceeded critical values of `200` and `800` or if the alarm is triggered by some combination of the two inside the neural network.
+Once `handler` is triggered, we read an S3 object and then make an MQTT publish call to the device topic if either temperature or pressure exceeded critical values of `200` and `800` or if the alarm is triggered by some combination of the two inside the neural network.
+
+Now let's setup some rules in ThingFabric. After you registered, go to your first project and then select "Rules" on the left.
 
 ## Outro

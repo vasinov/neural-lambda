@@ -17,25 +17,25 @@ var config = {
 };
 
 var trainingData = [
-  {input: { t: 10, p: 275 }, output: { alarm: 0 }},
-  {input: { t: 14, p: 230 }, output: { alarm: 0 }},
-  {input: { t: 65, p: 240 }, output: { alarm: 0 }},
-  {input: { t: 89, p: 301 }, output: { alarm: 1 }},
-  {input: { t: 93, p: 290 }, output: { alarm: 1 }},
-  {input: { t: 20, p: 400 }, output: { alarm: 0 }},
-  {input: { t: 32, p: 503 }, output: { alarm: 1 }},
-  {input: { t: 55, p: 600 }, output: { alarm: 1 }},
-  {input: { t: 120, p: 250 }, output: { alarm: 1 }},
-  {input: { t: 99, p: 275 }, output: { alarm: 0 }},
-  {input: { t: 15, p: 104 }, output: { alarm: 0 }},
-  {input: { t: 42, p: 400 }, output: { alarm: 0 }},
-  {input: { t: 102, p: 275 }, output: { alarm: 0 }},
-  {input: { t: 82, p: 302 }, output: { alarm: 1 }},
-  {input: { t: 51, p: 101 }, output: { alarm: 0 }},
-  {input: { t: 10, p: 590 }, output: { alarm: 0 }},
-  {input: { t: 51, p: 321 }, output: { alarm: 1 }},
-  {input: { t: 22, p: 275 }, output: { alarm: 0 }},
-  {input: { t: 32, p: 275 }, output: { alarm: 0 }}
+  { input: { t: 10, p: 275 }, output: { alarm: 0 } },
+  { input: { t: 14, p: 230 }, output: { alarm: 0 } },
+  { input: { t: 65, p: 240 }, output: { alarm: 0 } },
+  { input: { t: 89, p: 301 }, output: { alarm: 1 } },
+  { input: { t: 93, p: 290 }, output: { alarm: 1 } },
+  { input: { t: 20, p: 400 }, output: { alarm: 0 } },
+  { input: { t: 32, p: 503 }, output: { alarm: 1 } },
+  { input: { t: 55, p: 600 }, output: { alarm: 1 } },
+  { input: { t: 120, p: 250 }, output: { alarm: 1 } },
+  { input: { t: 99, p: 275 }, output: { alarm: 0 } },
+  { input: { t: 15, p: 104 }, output: { alarm: 0 } },
+  { input: { t: 42, p: 400 }, output: { alarm: 0 } },
+  { input: { t: 102, p: 275 }, output: { alarm: 0 } },
+  { input: { t: 82, p: 302 }, output: { alarm: 1 } },
+  { input: { t: 51, p: 101 }, output: { alarm: 0 } },
+  { input: { t: 10, p: 590 }, output: { alarm: 0 } },
+  { input: { t: 51, p: 321 }, output: { alarm: 1 } },
+  { input: { t: 22, p: 275 }, output: { alarm: 0 } },
+  { input: { t: 32, p: 275 }, output: { alarm: 0 } }
 ];
 
 function Alarm(config) {
@@ -116,6 +116,10 @@ function MqttClient(config, onClose, onError) {
   _this.publish = function(topicName, dataPoint) {
     return _this.client.publish(topicName, JSON.stringify({ alarm: true, values: dataPoint }));
   };
+  
+  _this.disconnect = function() {
+    return _this.client.end();  
+  };
 }
 
 exports.handler = function(event, context) {
@@ -149,7 +153,7 @@ exports.handler = function(event, context) {
       }
     });
 
-    mqtt.client.end();
+    mqtt.disconnect();
   });
 };
 
