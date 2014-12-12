@@ -40,7 +40,7 @@ var config = {
   alarm: {
     maxTemp: 200,
     maxPressure: 800,
-    alarmThreshold: 0.7
+    alarmThreshold: 0.6
   }
 };
 
@@ -97,8 +97,8 @@ function MqttClient(config, onClose, onError) {
 
   _this.client.on("error", function(error) { onError(error) });
 
-  _this.publish = function(topicName, dataPoint) {
-    return _this.client.publish(topicName, JSON.stringify({ alarm: true, values: dataPoint }));
+  _this.publish = function(topicName, payload) {
+    return _this.client.publish(topicName, JSON.stringify(payload));
   };
   
   _this.disconnect = function() {
@@ -158,9 +158,12 @@ function Alarm(config) {
   };
 
   _this.isTriggered = function(data) {
-    var guessedAlarm = _this.nn.run({ t: _this.tempToInput(data.t), p: _this.pressureToInput(data.p) });
+    var guessedAlarm = _this.nn.run({ t: _this.tempToInput(data.t), p: _this.pressureToInput(data.p) }).alarm;
 
-    return (guessedAlarm.alarm > _this.alarmThreshold);
+    return {
+      triggered: (guessedAlarm > _this.alarmThreshold),
+      guessedAlarm: guessedAlarm
+    };
   };
 }
 ```
@@ -175,7 +178,7 @@ Now it's time to put all pieces together and write a handler function that Amazo
 exports.handler = function(event, context) {
   var
     parser = new S3Parser(),
-    
+
     mqtt = new MqttClient(
       config.mqtt,
       function () {
@@ -185,33 +188,51 @@ exports.handler = function(event, context) {
         return context.done(null, error);
       }
     ),
-    
+
     alarm = new Alarm(config.alarm);
 
-  parser.parseS3Object(function(payload) {
+  parser.parseFakeS3Object(function(payload) {
     payload.readings.forEach(function(reading) {
       var
         dataPoint = reading.values,
         outputTopic = config.mqtt.outputTopic + "/" + reading.device_id;
 
       if (dataPoint.t > config.alarm.maxTemp || dataPoint.p > config.alarm.maxPressure) {
-        mqtt.publish(outputTopic, dataPoint);
+        mqtt.publish(
+          outputTopic, { alarm: 1, values: dataPoint }
+        );
       } else {
         alarm.train(trainingData);
 
-        if (alarm.isTriggered(dataPoint)) {
-          mqtt.publish(outputTopic, dataPoint);
+        var trigger = alarm.isTriggered(dataPoint);
+
+        if (trigger.triggered) {
+          mqtt.publish(
+            outputTopic, { alarm: trigger.guessedAlarm, values: dataPoint }
+          );
         }
       }
     });
 
-    mqtt.client.end();
+    mqtt.disconnect();
   });
 };
 ```
 
 Once `handler` is triggered, we read an S3 object and then make an MQTT publish call to the device topic if either temperature or pressure exceeded critical values of `200` and `800` or if the alarm is triggered by some combination of the two inside the neural network.
 
-Now let's setup some rules in ThingFabric. After you registered, go to your first project and then select "Rules" on the left.
+![](screenshots/messages.png)
+
+Now let's setup some rules in ThingFabric. After you registered, go to your first project and then select "Rules" on the left. In the wizard select "Send SMS" and type your phone number starting with a `1`, a message, and then click "Save". Then go to the Advanced tab and change your rule to:
+
+```
+"<YOUR DOMAIN>/lambda/#" {"values.t":val where val > 0.7} -> sms to:"17209999999" text:"Temperature is too high!"
+```
+
+Congratulations! You created your first rule. It will trigger a text message if the temperature is too high. You can get pretty sophisticated with our rules engine and use payload values in custom logic. [Check out](https://2lemetry.atlassian.net/wiki/display/KB/How+to+use+the+Rules+Engine) the docs and create more rules to complete this project!
 
 ## Outro
+
+We just created a pretty cool lambda that uses a neural network to make decisions based on S3 payloads. This approach can be applied in numerous Internet of Things scenarios. Obviously, there are a few things that are missing.
+
+First off, it would be cool to load the state of the neural network from a file on S3 without training it every time the handler function gets triggered. Another way to improve this project is to explore the ThingFabric Rules Engine [documentation](https://2lemetry.atlassian.net/wiki/display/KB/How+to+use+the+Rules+Engine) and setup rules that would shut off devices by sending another MQTT message with QoS2, meaning 100% deliverability guarantee.

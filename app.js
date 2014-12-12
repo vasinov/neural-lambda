@@ -12,7 +12,7 @@ var config = {
   alarm: {
     maxTemp: 200,
     maxPressure: 800,
-    alarmThreshold: 0.7
+    alarmThreshold: 0.6
   }
 };
 
@@ -68,9 +68,12 @@ function Alarm(config) {
   };
 
   _this.isTriggered = function(data) {
-    var guessedAlarm = _this.nn.run({ t: _this.tempToInput(data.t), p: _this.pressureToInput(data.p) });
+    var guessedAlarm = _this.nn.run({ t: _this.tempToInput(data.t), p: _this.pressureToInput(data.p) }).alarm;
 
-    return (guessedAlarm.alarm > _this.alarmThreshold);
+    return {
+      triggered: (guessedAlarm > _this.alarmThreshold),
+      guessedAlarm: guessedAlarm
+    };
   };
 }
 
@@ -79,9 +82,9 @@ function S3Parser() {
 
   _this.parseFakeS3Object = function(cb) {
     var rs = { readings: [
-      { device_id: "foo", values: { t: 100, p: 400 } },
+      { device_id: "foo", values: { t: 100, p: 300 } },
       { device_id: "bar", values: { t: 120, p: 320 } },
-      { device_id: "foobar", values: { t: 90, p: 220 } }
+      { device_id: "foobar", values: { t: 90, p: 120 } }
     ] };
 
     return cb(rs);
@@ -113,8 +116,8 @@ function MqttClient(config, onClose, onError) {
 
   _this.client.on("error", function(error) { onError(error) });
 
-  _this.publish = function(topicName, dataPoint) {
-    return _this.client.publish(topicName, JSON.stringify({ alarm: true, values: dataPoint }));
+  _this.publish = function(topicName, payload) {
+    return _this.client.publish(topicName, JSON.stringify(payload));
   };
   
   _this.disconnect = function() {
@@ -145,12 +148,18 @@ exports.handler = function(event, context) {
         outputTopic = config.mqtt.outputTopic + "/" + reading.device_id;
 
       if (dataPoint.t > config.alarm.maxTemp || dataPoint.p > config.alarm.maxPressure) {
-        mqtt.publish(outputTopic, dataPoint);
+        mqtt.publish(
+          outputTopic, { alarm: 1, values: dataPoint }
+        );
       } else {
         alarm.train(trainingData);
 
-        if (alarm.isTriggered(dataPoint)) {
-          mqtt.publish(outputTopic, dataPoint);
+        var trigger = alarm.isTriggered(dataPoint);
+
+        if (trigger.triggered) {
+          mqtt.publish(
+            outputTopic, { alarm: trigger.guessedAlarm, values: dataPoint }
+          );
         }
       }
     });
