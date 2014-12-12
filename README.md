@@ -10,7 +10,7 @@ It's easy to imagine a large facility or a factory that has thousands of differe
  
  In my Lambda experiment I decided to emulate this scenario in which pairs of sensors report their values to some kind of centralized hub every few seconds and then the hub deploys a combined payload snapshot to Amazon S3, which triggers a lambda with a neural network in it, and then, finally, publishes an MQTT message to ThingFabric if the alarm value is greater than a certain threshold.
  
- ## Setting Up Lambda
+## Setting Up Lambda
  
  To better understand how we should setup our lambda let's describe all events that are going to happen in the system:
  
@@ -51,10 +51,10 @@ Here we just setup some initial config variables for the lambda and the main eve
   
   
  
- ## Adding a Neural Network
+## Adding a Neural Network
  
  
- ## Putting It All Together
+## Putting It All Together
  
  
- ## Outro
+## Outro
