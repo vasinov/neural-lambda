@@ -77,25 +77,15 @@ function Alarm(config) {
   };
 }
 
-function S3Parser() {
+function S3Parser(event) {
   var _this = this;
-
-  _this.parseFakeS3Object = function(cb) {
-    var rs = { readings: [
-      { device_id: "foo", values: { t: 100, p: 300 } },
-      { device_id: "bar", values: { t: 120, p: 320 } },
-      { device_id: "foobar", values: { t: 90, p: 120 } }
-    ] };
-
-    return cb(rs);
-  };
+  _this.event = event;
+  _this.s3 = new aws.S3({apiVersion: '2006-03-01'});
 
   _this.parseS3Object = function(cb) {
-    var s3 = new aws.S3({apiVersion: '2006-03-01'});
-
-    s3.getObject({
-      Bucket: event.Records[0].s3.bucket.name,
-      Key: event.Records[0].s3.object.key
+    _this.s3.getObject({
+      Bucket: _this.event.Records[0].s3.bucket.name,
+      Key: _this.event.Records[0].s3.object.key
     }, function (err, data) {
       return cb(JSON.parse(data.Body.toString()));
     });
@@ -127,7 +117,7 @@ function MqttClient(config, onClose, onError) {
 
 exports.handler = function(event, context) {
   var
-    parser = new S3Parser(),
+    parser = new S3Parser(event),
 
     mqtt = new MqttClient(
       config.mqtt,
@@ -141,7 +131,7 @@ exports.handler = function(event, context) {
 
     alarm = new Alarm(config.alarm);
 
-  parser.parseFakeS3Object(function(payload) {
+  parser.parseS3Object(function(payload) {
     payload.readings.forEach(function(reading) {
       var
         dataPoint = reading.values,

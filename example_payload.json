@@ -1,0 +1,5 @@
+{ "readings": [
+  { "device_id": "device_foo", "values": { "t": 100, "p": 300 } },
+  { "device_id": "device_bar", "values": { "t": 120, "p": 320 } },
+  { "device_id": "device_foobar", "values": { "t": 90, "p": 120 } }
+] }
